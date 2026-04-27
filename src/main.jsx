@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, Database, LogOut, Download } from 'lucide-react'
+import {
+  Plus,
+  Trash2,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  Database,
+  LogOut,
+  Download,
+  Pencil,
+  X,
+} from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { exportToExcel } from './export'
 import './style.css'
@@ -20,6 +31,17 @@ function money(value) {
   }).format(Number(value || 0))
 }
 
+function emptyForm() {
+  return {
+    title: '',
+    amount: '',
+    type: 'expense',
+    category: 'Jídlo',
+    transaction_date: today,
+    note: '',
+  }
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [authMode, setAuthMode] = useState('login')
@@ -28,15 +50,9 @@ function App() {
   const [items, setItems] = useState([])
   const [month, setMonth] = useState(currentMonth)
   const [loading, setLoading] = useState(true)
+  const [editingItem, setEditingItem] = useState(null)
 
-  const [form, setForm] = useState({
-    title: '',
-    amount: '',
-    type: 'expense',
-    category: 'Jídlo',
-    transaction_date: today,
-    note: '',
-  })
+  const [form, setForm] = useState(emptyForm())
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -82,7 +98,11 @@ function App() {
 
     if (authMode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) alert(error.message)
+
+      if (error) {
+        alert(error.message)
+      }
+
       return
     }
 
@@ -101,6 +121,8 @@ function App() {
     await supabase.auth.signOut()
     setUser(null)
     setItems([])
+    setEditingItem(null)
+    setForm(emptyForm())
   }
 
   async function loadItems(userId) {
@@ -152,7 +174,7 @@ function App() {
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [filtered])
 
-  async function addItem(e) {
+  async function saveItem(e) {
     e.preventDefault()
 
     if (!user) {
@@ -175,23 +197,48 @@ function App() {
       user_id: user.id,
     }
 
-    const { error } = await supabase
-      .from('budget_transactions')
-      .insert(payload)
+    if (editingItem) {
+      const { error } = await supabase
+        .from('budget_transactions')
+        .update(payload)
+        .eq('id', editingItem.id)
+        .eq('user_id', user.id)
 
-    if (error) {
-      alert(error.message)
-      return
+      if (error) {
+        alert(error.message)
+        return
+      }
+    } else {
+      const { error } = await supabase
+        .from('budget_transactions')
+        .insert(payload)
+
+      if (error) {
+        alert(error.message)
+        return
+      }
     }
 
     await loadItems(user.id)
+    cancelEdit()
+  }
+
+  function startEdit(item) {
+    setEditingItem(item)
 
     setForm({
-      ...form,
-      title: '',
-      amount: '',
-      note: '',
+      title: item.title || '',
+      amount: item.amount || '',
+      type: item.type || 'expense',
+      category: item.category || 'Jídlo',
+      transaction_date: item.transaction_date || today,
+      note: item.note || '',
     })
+  }
+
+  function cancelEdit() {
+    setEditingItem(null)
+    setForm(emptyForm())
   }
 
   async function deleteItem(id) {
@@ -216,6 +263,10 @@ function App() {
     }
 
     await loadItems(user.id)
+
+    if (editingItem?.id === id) {
+      cancelEdit()
+    }
   }
 
   function updateForm(next) {
@@ -306,9 +357,10 @@ function App() {
           <Database size={18} />
           Supabase aktivní
 
-          <button onClick={() => exportToExcel(filtered)}>
-        Export Excel
-        </button>
+          <button className="logout" type="button" onClick={() => exportToExcel(filtered)}>
+            <Download size={16} />
+            Export Excel
+          </button>
 
           <button className="logout" type="button" onClick={logout}>
             <LogOut size={16} />
@@ -325,7 +377,7 @@ function App() {
 
       <section className="panel">
         <div className="panel-head">
-          <h2>Nová položka</h2>
+          <h2>{editingItem ? 'Upravit položku' : 'Nová položka'}</h2>
 
           <input
             type="month"
@@ -334,7 +386,7 @@ function App() {
           />
         </div>
 
-        <form className="form" onSubmit={addItem}>
+        <form className="form" onSubmit={saveItem}>
           <input
             placeholder="Název"
             value={form.title}
@@ -381,8 +433,15 @@ function App() {
 
           <button type="submit">
             <Plus size={18} />
-            Přidat
+            {editingItem ? 'Uložit změny' : 'Přidat'}
           </button>
+
+          {editingItem && (
+            <button type="button" className="secondary-button" onClick={cancelEdit}>
+              <X size={18} />
+              Zrušit
+            </button>
+          )}
         </form>
       </section>
 
@@ -411,7 +470,17 @@ function App() {
                   <button
                     className="icon"
                     type="button"
+                    onClick={() => startEdit(item)}
+                    title="Upravit"
+                  >
+                    <Pencil size={16} />
+                  </button>
+
+                  <button
+                    className="icon"
+                    type="button"
                     onClick={() => deleteItem(item.id)}
+                    title="Smazat"
                   >
                     <Trash2 size={16} />
                   </button>
