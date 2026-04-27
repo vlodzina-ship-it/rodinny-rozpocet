@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, Database, LogOut, Download } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
-import { exportToCSV } from './export'
+import { exportToExcel } from './export'
 import './style.css'
 
 const categories = {
@@ -306,10 +306,9 @@ function App() {
           <Database size={18} />
           Supabase aktivní
 
-          <button className="logout" type="button" onClick={() => exportToCSV(filtered)}>
-            <Download size={16} />
-            Export CSV
-          </button>
+          <button onClick={() => exportToExcel(filtered)}>
+        Export Excel
+        </button>
 
           <button className="logout" type="button" onClick={logout}>
             <LogOut size={16} />
