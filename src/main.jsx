@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, Database } from 'lucide-react'
+import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, Database, LogOut } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import './style.css'
 
@@ -16,15 +16,10 @@ function money(value) {
   return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: 'CZK' }).format(Number(value || 0))
 }
 
-function localLoad() {
-  return JSON.parse(localStorage.getItem('budget_transactions') || '[]')
-}
-
-function localSave(items) {
-  localStorage.setItem('budget_transactions', JSON.stringify(items))
-}
-
 function App() {
+  const [user, setUser] = useState(null)
+  const [authMode, setAuthMode] = useState('login')
+  const [authForm, setAuthForm] = useState({ email: '', password: '' })
   const [items, setItems] = useState([])
   const [month, setMonth] = useState(currentMonth)
   const [loading, setLoading] = useState(true)
@@ -37,22 +32,66 @@ function App() {
     note: '',
   })
 
-  async function loadItems() {
-    setLoading(true)
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('budget_transactions')
-        .select('*')
-        .order('transaction_date', { ascending: false })
-      if (error) alert(error.message)
-      setItems(data || [])
-    } else {
-      setItems(localLoad())
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false)
+      return
     }
-    setLoading(false)
+
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user || null)
+      setLoading(false)
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null)
+    })
+
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (user) loadItems()
+    else setItems([])
+  }, [user])
+
+  async function handleAuth(e) {
+    e.preventDefault()
+
+    const email = authForm.email.trim()
+    const password = authForm.password
+
+    if (!email || !password) return alert('Vyplň e-mail i heslo.')
+
+    const result = authMode === 'login'
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({ email, password })
+
+    if (result.error) return alert(result.error.message)
+
+    if (authMode === 'register') {
+      alert('Registrace hotová. Teď se můžeš přihlásit.')
+      setAuthMode('login')
+    }
   }
 
-  useEffect(() => { loadItems() }, [])
+  async function logout() {
+    await supabase.auth.signOut()
+  }
+
+  async function loadItems() {
+    setLoading(true)
+
+    const { data, error } = await supabase
+      .from('budget_transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('transaction_date', { ascending: false })
+
+    if (error) alert(error.message)
+    setItems(data || [])
+    setLoading(false)
+  }
 
   const filtered = useMemo(() => {
     return items.filter(item => String(item.transaction_date || '').startsWith(month))
@@ -69,7 +108,7 @@ function App() {
     for (const item of filtered.filter(i => i.type === 'expense')) {
       map[item.category] = (map[item.category] || 0) + Number(item.amount)
     }
-    return Object.entries(map).sort((a,b) => b[1]-a[1])
+    return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [filtered])
 
   async function addItem(e) {
@@ -80,32 +119,29 @@ function App() {
       ...form,
       amount: Number(form.amount),
       category: form.category || categories[form.type][0],
+      user_id: user.id,
     }
 
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from('budget_transactions').insert(payload)
-      if (error) return alert(error.message)
-      await loadItems()
-    } else {
-      const next = [{ ...payload, id: crypto.randomUUID(), created_at: new Date().toISOString() }, ...items]
-      setItems(next)
-      localSave(next)
-    }
+    const { error } = await supabase.from('budget_transactions').insert(payload)
 
+    if (error) return alert(error.message)
+
+    await loadItems()
     setForm({ ...form, title: '', amount: '', note: '' })
   }
 
   async function deleteItem(id) {
     if (!confirm('Opravdu smazat položku?')) return
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from('budget_transactions').delete().eq('id', id)
-      if (error) return alert(error.message)
-      await loadItems()
-    } else {
-      const next = items.filter(i => i.id !== id)
-      setItems(next)
-      localSave(next)
-    }
+
+    const { error } = await supabase
+      .from('budget_transactions')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+
+    if (error) return alert(error.message)
+
+    await loadItems()
   }
 
   function updateForm(next) {
@@ -117,15 +153,62 @@ function App() {
     })
   }
 
+  if (!isSupabaseConfigured) {
+    return (
+      <main className="app">
+        <section className="panel">
+          <h1>Supabase není nastavený</h1>
+          <p className="muted">Zkontroluj proměnné VITE_SUPABASE_URL a VITE_SUPABASE_ANON_KEY.</p>
+        </section>
+      </main>
+    )
+  }
+
+  if (loading) {
+    return <main className="app"><p>Načítám…</p></main>
+  }
+
+  if (!user) {
+    return (
+      <main className="app">
+        <section className="panel auth-panel">
+          <h1>{authMode === 'login' ? 'Přihlášení' : 'Registrace'}</h1>
+          <form className="form auth-form" onSubmit={handleAuth}>
+            <input
+              type="email"
+              placeholder="E-mail"
+              value={authForm.email}
+              onChange={e => setAuthForm({ ...authForm, email: e.target.value })}
+            />
+            <input
+              type="password"
+              placeholder="Heslo"
+              value={authForm.password}
+              onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
+            />
+            <button>{authMode === 'login' ? 'Přihlásit' : 'Registrovat'}</button>
+          </form>
+
+          <button className="link-button" onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
+            {authMode === 'login' ? 'Nemáš účet? Registrovat' : 'Už máš účet? Přihlásit'}
+          </button>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="app">
       <header className="hero">
         <div>
           <p className="eyebrow">Rodinný rozpočet</p>
           <h1>Přehled příjmů a výdajů</h1>
-          <p className="muted">Jednoduchá evidence pro domácnost, měsíc po měsíci.</p>
+          <p className="muted">Přihlášen: {user.email}</p>
         </div>
-        <div className="status"><Database size={18}/> {isSupabaseConfigured ? 'Supabase aktivní' : 'Lokální režim'}</div>
+        <div className="status">
+          <Database size={18}/> Supabase aktivní
+          <button className="logout" onClick={logout}><LogOut size={16}/> Odhlásit</button>
+        </div>
       </header>
 
       <section className="grid cards">
