@@ -1,38 +1,35 @@
-export function exportToCSV(items) {
-  if (!items || items.length === 0) {
+function exportCSV() {
+  if (filtered.length === 0) {
     alert('Žádná data k exportu')
     return
   }
 
-  const header = [
-    'Název',
-    'Částka',
-    'Typ',
-    'Kategorie',
-    'Datum',
-    'Poznámka'
-  ]
+  // HLAVIČKA
+  const headers = ['Datum', 'Název', 'Typ', 'Kategorie', 'Částka', 'Poznámka']
 
-  const rows = items.map(i => [
-    i.title,
-    i.amount,
-    i.type === 'income' ? 'Příjem' : 'Výdaj',
-    i.category,
-    i.transaction_date,
-    i.note || ''
+  // DATA
+  const rows = filtered.map(item => [
+    item.transaction_date,
+    item.title,
+    item.type === 'income' ? 'Příjem' : 'Výdaj',
+    item.category,
+    item.amount,
+    item.note || ''
   ])
 
-  const csv = [
-    header.join(';'),
-    ...rows.map(r => r.join(';'))
-  ].join('\n')
+  // 👉 důležité: použijeme STŘEDNÍK místo čárky
+  const csvContent =
+    '\uFEFF' + // správné kódování pro Excel (UTF-8)
+    [headers, ...rows]
+      .map(row => row.join(';'))
+      .join('\n')
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
 
   const a = document.createElement('a')
   a.href = url
-  a.download = 'rozpocet.csv'
+  a.download = `rozpocet-${month}.csv`
   a.click()
 
   URL.revokeObjectURL(url)
