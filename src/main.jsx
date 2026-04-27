@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, Database, LogOut } from 'lucide-react'
+import { Plus, Trash2, Wallet, TrendingUp, TrendingDown, Database, LogOut, Download } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
+import { exportToCSV } from './export'
 import './style.css'
 
 const categories = {
@@ -80,22 +81,12 @@ function App() {
     }
 
     if (authMode === 'login') {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        alert(error.message)
-      }
-
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) alert(error.message)
       return
     }
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+    const { error } = await supabase.auth.signUp({ email, password })
 
     if (error) {
       alert(error.message)
@@ -315,6 +306,11 @@ function App() {
           <Database size={18} />
           Supabase aktivní
 
+          <button className="logout" type="button" onClick={() => exportToCSV(filtered)}>
+            <Download size={16} />
+            Export CSV
+          </button>
+
           <button className="logout" type="button" onClick={logout}>
             <LogOut size={16} />
             Odhlásit
@@ -395,9 +391,7 @@ function App() {
         <div className="panel">
           <h2>Položky za měsíc</h2>
 
-          {loading ? (
-            <p>Načítám…</p>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <p className="muted">Zatím žádné položky.</p>
           ) : (
             <div className="list">
