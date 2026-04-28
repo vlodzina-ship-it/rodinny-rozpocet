@@ -11,6 +11,8 @@ import {
   Download,
   Pencil,
   X,
+  Users,
+  UserPlus,
 } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { exportToExcel } from './export'
@@ -47,6 +49,10 @@ function App() {
   const [authMode, setAuthMode] = useState('login')
   const [authForm, setAuthForm] = useState({ email: '', password: '' })
 
+  const [householdId, setHouseholdId] = useState(null)
+  const [memberEmail, setMemberEmail] = useState('')
+  const [memberMessage, setMemberMessage] = useState('')
+
   const [items, setItems] = useState([])
   const [month, setMonth] = useState(currentMonth)
   const [loading, setLoading] = useState(true)
@@ -79,11 +85,31 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      loadItems(user.id)
+      initializeHousehold(user.id)
     } else {
+      setHouseholdId(null)
       setItems([])
+      setMemberEmail('')
+      setMemberMessage('')
     }
   }, [user])
+
+  async function initializeHousehold() {
+    setLoading(true)
+
+    const { data, error } = await supabase.rpc('get_or_create_my_household')
+
+    if (error) {
+      alert(error.message)
+      setLoading(false)
+      return
+    }
+
+    setHouseholdId(data)
+    await loadItems(data)
+
+    setLoading(false)
+  }
 
   async function handleAuth(e) {
     e.preventDefault()
@@ -120,18 +146,21 @@ function App() {
   async function logout() {
     await supabase.auth.signOut()
     setUser(null)
+    setHouseholdId(null)
     setItems([])
     setEditingItem(null)
     setForm(emptyForm())
+    setMemberEmail('')
+    setMemberMessage('')
   }
 
-  async function loadItems(userId) {
-    setLoading(true)
+  async function loadItems(activeHouseholdId = householdId) {
+    if (!activeHouseholdId) return
 
     const { data, error } = await supabase
       .from('budget_transactions')
       .select('*')
-      .eq('user_id', userId)
+      .eq('household_id', activeHouseholdId)
       .order('transaction_date', { ascending: false })
 
     if (error) {
@@ -140,8 +169,32 @@ function App() {
     } else {
       setItems(data || [])
     }
+  }
 
-    setLoading(false)
+  async function addMember(e) {
+    e.preventDefault()
+
+    const email = memberEmail.trim()
+
+    if (!email) {
+      setMemberMessage('Vyplň e-mail člena.')
+      return
+    }
+
+    setMemberMessage('Přidávám člena…')
+
+    const { error } = await supabase.rpc('add_household_member_by_email', {
+      member_email: email,
+    })
+
+    if (error) {
+      setMemberMessage(error.message)
+      return
+    }
+
+    setMemberEmail('')
+    setMemberMessage('Člen byl přidán do společného rozpočtu.')
+    await loadItems()
   }
 
   const filtered = useMemo(() => {
@@ -182,6 +235,11 @@ function App() {
       return
     }
 
+    if (!householdId) {
+      alert('Společný rozpočet ještě není připravený.')
+      return
+    }
+
     if (!form.title.trim() || !form.amount) {
       alert('Vyplň název a částku.')
       return
@@ -195,6 +253,7 @@ function App() {
       transaction_date: form.transaction_date,
       note: form.note.trim(),
       user_id: user.id,
+      household_id: householdId,
     }
 
     if (editingItem) {
@@ -202,7 +261,7 @@ function App() {
         .from('budget_transactions')
         .update(payload)
         .eq('id', editingItem.id)
-        .eq('user_id', user.id)
+        .eq('household_id', householdId)
 
       if (error) {
         alert(error.message)
@@ -219,7 +278,7 @@ function App() {
       }
     }
 
-    await loadItems(user.id)
+    await loadItems(householdId)
     cancelEdit()
   }
 
@@ -247,6 +306,11 @@ function App() {
       return
     }
 
+    if (!householdId) {
+      alert('Společný rozpočet ještě není připravený.')
+      return
+    }
+
     if (!confirm('Opravdu smazat položku?')) {
       return
     }
@@ -255,14 +319,14 @@ function App() {
       .from('budget_transactions')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id)
+      .eq('household_id', householdId)
 
     if (error) {
       alert(error.message)
       return
     }
 
-    await loadItems(user.id)
+    await loadItems(householdId)
 
     if (editingItem?.id === id) {
       cancelEdit()
@@ -349,7 +413,7 @@ function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">Rodinný rozpočet</p>
-          <h1>Přehled příjmů a výdajů</h1>
+          <h1>Společný přehled příjmů a výdajů</h1>
           <p className="muted">Přihlášen: {user.email}</p>
         </div>
 
@@ -369,10 +433,42 @@ function App() {
         </div>
       </header>
 
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Rodinný rozpočet</h2>
+            <p className="muted">
+              Přidej manželku nebo dalšího člena e-mailem. Uživatel musí být nejdřív zaregistrovaný v aplikaci.
+            </p>
+          </div>
+        </div>
+
+        <form className="form member-form" onSubmit={addMember}>
+          <input
+            type="email"
+            placeholder="E-mail člena rodiny"
+            value={memberEmail}
+            onChange={e => setMemberEmail(e.target.value)}
+          />
+
+          <button type="submit">
+            <UserPlus size={18} />
+            Přidat člena
+          </button>
+        </form>
+
+        {memberMessage && <p className="muted">{memberMessage}</p>}
+
+        <p className="muted">
+          ID rozpočtu: {householdId || 'načítám…'}
+        </p>
+      </section>
+
       <section className="grid cards">
         <Card icon={<TrendingUp />} title="Příjmy" value={money(totals.income)} />
         <Card icon={<TrendingDown />} title="Výdaje" value={money(totals.expense)} />
         <Card icon={<Wallet />} title="Zůstatek" value={money(totals.balance)} highlight={totals.balance >= 0} />
+        <Card icon={<Users />} title="Režim" value="Sdílený" highlight />
       </section>
 
       <section className="panel">
