@@ -18,6 +18,13 @@ import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { exportToExcel } from './export'
 import './style.css'
 
+const budgetGroups = [
+  { value: 'income', label: 'Příjem', type: 'income' },
+  { value: 'mandatory', label: 'Mandatorní výdaj', type: 'expense' },
+  { value: 'extra', label: 'Mimořádný výdaj', type: 'expense' },
+  { value: 'planned', label: 'Plánovaný rozpočet', type: 'expense' },
+]
+
 const categories = {
   income: ['Výplata', 'Podnikání', 'Přídavky', 'Dárky', 'Ostatní'],
   expense: ['Bydlení', 'Jídlo', 'Doprava', 'Děti', 'Zdraví', 'Zábava', 'Oblečení', 'Spoření', 'Ostatní'],
@@ -33,10 +40,19 @@ function money(value) {
   }).format(Number(value || 0))
 }
 
+function groupLabel(value) {
+  return budgetGroups.find(group => group.value === value)?.label || 'Mandatorní výdaj'
+}
+
+function groupType(value) {
+  return budgetGroups.find(group => group.value === value)?.type || 'expense'
+}
+
 function emptyForm() {
   return {
     title: '',
     amount: '',
+    budget_group: 'mandatory',
     type: 'expense',
     category: 'Jídlo',
     transaction_date: today,
@@ -85,7 +101,7 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      initializeHousehold(user.id)
+      initializeHousehold()
     } else {
       setHouseholdId(null)
       setItems([])
@@ -107,7 +123,6 @@ function App() {
 
     setHouseholdId(data)
     await loadItems(data)
-
     setLoading(false)
   }
 
@@ -203,29 +218,51 @@ function App() {
 
   const totals = useMemo(() => {
     const income = filtered
-      .filter(item => item.type === 'income')
+      .filter(item => item.budget_group === 'income' || item.type === 'income')
       .reduce((sum, item) => sum + Number(item.amount), 0)
 
-    const expense = filtered
-      .filter(item => item.type === 'expense')
+    const mandatory = filtered
+      .filter(item => item.budget_group === 'mandatory')
       .reduce((sum, item) => sum + Number(item.amount), 0)
+
+    const extra = filtered
+      .filter(item => item.budget_group === 'extra')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+
+    const planned = filtered
+      .filter(item => item.budget_group === 'planned')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+
+    const totalExpenses = mandatory + extra + planned
 
     return {
       income,
-      expense,
-      balance: income - expense,
+      mandatory,
+      extra,
+      planned,
+      totalExpenses,
+      balance: income - totalExpenses,
+      expectedBalance: income - mandatory - planned,
     }
   }, [filtered])
 
   const byCategory = useMemo(() => {
     const map = {}
 
-    for (const item of filtered.filter(item => item.type === 'expense')) {
+    for (const item of filtered.filter(item => item.budget_group !== 'income' && item.type !== 'income')) {
       map[item.category] = (map[item.category] || 0) + Number(item.amount)
     }
 
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [filtered])
+
+  const byGroup = useMemo(() => {
+    return [
+      ['Mandatorní výdaje', totals.mandatory],
+      ['Mimořádné výdaje', totals.extra],
+      ['Plánovaný rozpočet', totals.planned],
+    ].filter(([, amount]) => amount > 0)
+  }, [totals])
 
   async function saveItem(e) {
     e.preventDefault()
@@ -245,11 +282,14 @@ function App() {
       return
     }
 
+    const actualType = groupType(form.budget_group)
+
     const payload = {
       title: form.title.trim(),
       amount: Number(form.amount),
-      type: form.type,
-      category: form.category || categories[form.type][0],
+      type: actualType,
+      budget_group: form.budget_group,
+      category: form.category || categories[actualType][0],
       transaction_date: form.transaction_date,
       note: form.note.trim(),
       user_id: user.id,
@@ -283,13 +323,17 @@ function App() {
   }
 
   function startEdit(item) {
+    const itemGroup = item.budget_group || (item.type === 'income' ? 'income' : 'mandatory')
+    const itemType = groupType(itemGroup)
+
     setEditingItem(item)
 
     setForm({
       title: item.title || '',
       amount: item.amount || '',
-      type: item.type || 'expense',
-      category: item.category || 'Jídlo',
+      budget_group: itemGroup,
+      type: itemType,
+      category: item.category || categories[itemType][0],
       transaction_date: item.transaction_date || today,
       note: item.note || '',
     })
@@ -334,15 +378,22 @@ function App() {
   }
 
   function updateForm(next) {
-    const changedType = next.type && next.type !== form.type
-
-    setForm({
+    let nextForm = {
       ...form,
       ...next,
-      category: changedType
-        ? categories[next.type][0]
-        : next.category ?? form.category,
-    })
+    }
+
+    if (next.budget_group && next.budget_group !== form.budget_group) {
+      const nextType = groupType(next.budget_group)
+
+      nextForm = {
+        ...nextForm,
+        type: nextType,
+        category: categories[nextType][0],
+      }
+    }
+
+    setForm(nextForm)
   }
 
   if (!isSupabaseConfigured) {
@@ -413,7 +464,7 @@ function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">Rodinný rozpočet</p>
-          <h1>Společný přehled příjmů a výdajů</h1>
+          <h1>Rozdělení rozpočtu domácnosti</h1>
           <p className="muted">Přihlášen: {user.email}</p>
         </div>
 
@@ -466,9 +517,11 @@ function App() {
 
       <section className="grid cards">
         <Card icon={<TrendingUp />} title="Příjmy" value={money(totals.income)} />
-        <Card icon={<TrendingDown />} title="Výdaje" value={money(totals.expense)} />
-        <Card icon={<Wallet />} title="Zůstatek" value={money(totals.balance)} highlight={totals.balance >= 0} />
-        <Card icon={<Users />} title="Režim" value="Sdílený" highlight />
+        <Card icon={<TrendingDown />} title="Mandatorní výdaje" value={money(totals.mandatory)} />
+        <Card icon={<TrendingDown />} title="Mimořádné výdaje" value={money(totals.extra)} />
+        <Card icon={<Wallet />} title="Plánovaný rozpočet" value={money(totals.planned)} />
+        <Card icon={<Wallet />} title="Zůstatek po skutečných výdajích" value={money(totals.balance)} highlight={totals.balance >= 0} />
+        <Card icon={<Users />} title="Očekávaný zůstatek" value={money(totals.expectedBalance)} highlight={totals.expectedBalance >= 0} />
       </section>
 
       <section className="panel">
@@ -499,11 +552,14 @@ function App() {
           />
 
           <select
-            value={form.type}
-            onChange={e => updateForm({ type: e.target.value })}
+            value={form.budget_group}
+            onChange={e => updateForm({ budget_group: e.target.value })}
           >
-            <option value="expense">Výdaj</option>
-            <option value="income">Příjem</option>
+            {budgetGroups.map(group => (
+              <option key={group.value} value={group.value}>
+                {group.label}
+              </option>
+            ))}
           </select>
 
           <select
@@ -554,13 +610,13 @@ function App() {
                   <div>
                     <strong>{item.title}</strong>
                     <span>
-                      {item.transaction_date} · {item.category}
+                      {item.transaction_date} · {groupLabel(item.budget_group || (item.type === 'income' ? 'income' : 'mandatory'))} · {item.category}
                       {item.note ? ` · ${item.note}` : ''}
                     </span>
                   </div>
 
-                  <div className={item.type === 'income' ? 'income' : 'expense'}>
-                    {item.type === 'income' ? '+' : '-'} {money(item.amount)}
+                  <div className={item.budget_group === 'income' || item.type === 'income' ? 'income' : 'expense'}>
+                    {item.budget_group === 'income' || item.type === 'income' ? '+' : '-'} {money(item.amount)}
                   </div>
 
                   <button
@@ -587,10 +643,33 @@ function App() {
         </div>
 
         <div className="panel">
-          <h2>Výdaje podle kategorií</h2>
+          <h2>Výdaje podle skupin</h2>
+
+          {byGroup.length === 0 ? (
+            <p className="muted">Bez výdajů.</p>
+          ) : (
+            byGroup.map(([label, amount]) => (
+              <div className="bar-wrap" key={label}>
+                <div className="bar-label">
+                  <span>{label}</span>
+                  <strong>{money(amount)}</strong>
+                </div>
+
+                <div className="bar">
+                  <div
+                    style={{
+                      width: `${Math.min(100, (amount / Math.max(totals.totalExpenses, 1)) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+
+          <h2 style={{ marginTop: 28 }}>Výdaje podle kategorií</h2>
 
           {byCategory.length === 0 ? (
-            <p className="muted">Bez výdajů.</p>
+            <p className="muted">Bez kategorií.</p>
           ) : (
             byCategory.map(([category, amount]) => (
               <div className="bar-wrap" key={category}>
@@ -602,7 +681,7 @@ function App() {
                 <div className="bar">
                   <div
                     style={{
-                      width: `${Math.min(100, (amount / Math.max(totals.expense, 1)) * 100)}%`,
+                      width: `${Math.min(100, (amount / Math.max(totals.totalExpenses, 1)) * 100)}%`,
                     }}
                   />
                 </div>
