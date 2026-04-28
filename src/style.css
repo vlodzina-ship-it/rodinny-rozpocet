@@ -20,7 +20,7 @@ button {
 }
 
 .app {
-  width: min(1100px, calc(100% - 32px));
+  width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
   padding: 48px 0;
 }
@@ -48,7 +48,7 @@ button {
 
 h1 {
   margin: 0;
-  font-size: clamp(34px, 5.2vw, 52px);
+  font-size: clamp(34px, 5vw, 52px);
   line-height: 1.05;
   letter-spacing: -0.05em;
 }
@@ -74,6 +74,7 @@ h2 {
   white-space: nowrap;
 }
 
+.status button,
 .logout,
 .link-button,
 .secondary-button,
@@ -94,15 +95,10 @@ h2 {
   margin-top: 12px;
 }
 
-.secondary-button {
-  background: #eef2ff;
-  color: #4f46e5;
-}
-
+.secondary-button,
 .filter-button {
   background: #eef2ff;
   color: #4f46e5;
-  white-space: nowrap;
 }
 
 .filter-button.active {
@@ -131,6 +127,7 @@ h2 {
   padding: 24px;
   display: grid;
   gap: 8px;
+  min-height: 120px;
 }
 
 .card svg {
@@ -154,6 +151,15 @@ h2 {
   margin-bottom: 20px;
 }
 
+.panel[style] {
+  border-radius: 22px !important;
+}
+
+.panel h2 svg {
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
 .panel-head {
   display: grid;
   grid-template-columns: 1fr minmax(220px, 1fr);
@@ -163,27 +169,28 @@ h2 {
 
 .form {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr 1.25fr 1fr 1fr 1fr 150px auto auto;
-  gap: 10px;
+  grid-template-columns: 1.3fr 0.8fr 1.3fr 140px auto;
+  gap: 12px;
   align-items: center;
-}
-
-.member-form {
-  grid-template-columns: minmax(260px, 1fr) auto;
-  max-width: 620px;
 }
 
 .auth-form {
   grid-template-columns: 1fr 1fr auto;
 }
 
+.member-form {
+  grid-template-columns: minmax(260px, 1fr) auto;
+  max-width: 640px;
+}
+
 .form input,
 .form select,
 .panel-head input {
   width: 100%;
+  min-height: 48px;
   border: 1px solid #dbe1ee;
   border-radius: 14px;
-  padding: 13px 14px;
+  padding: 12px 14px;
   background: #ffffff;
   color: #111827;
   outline: none;
@@ -197,9 +204,10 @@ h2 {
 }
 
 .form button {
+  min-height: 48px;
   border: 0;
   border-radius: 14px;
-  padding: 13px 18px;
+  padding: 12px 18px;
   background: #5264ff;
   color: #ffffff;
   font-weight: 800;
@@ -210,13 +218,9 @@ h2 {
   white-space: nowrap;
 }
 
-.form button.secondary-button {
-  background: #eef2ff;
-  color: #4f46e5;
-}
-
+.form label,
 .checkbox-line {
-  min-height: 46px;
+  min-height: 48px;
   border: 1px solid #dbe1ee;
   border-radius: 14px;
   padding: 10px 12px;
@@ -225,23 +229,23 @@ h2 {
   font-weight: 700;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   white-space: nowrap;
 }
 
+.form input[type="checkbox"],
 .checkbox-line input {
   width: 18px;
   height: 18px;
+  min-height: auto;
+  padding: 0;
   accent-color: #5264ff;
-}
-
-.checkbox-line:has(input:disabled) {
-  opacity: 0.5;
 }
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -254,9 +258,9 @@ h2 {
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 42px 42px;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid #eef2f7;
   border-radius: 18px;
   background: #ffffff;
@@ -271,12 +275,13 @@ h2 {
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+  font-size: 16px;
 }
 
 .row span {
   display: block;
   color: #6b7280;
-  font-size: 14px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 
@@ -306,7 +311,8 @@ h2 {
   white-space: nowrap;
 }
 
-.icon {
+.icon,
+.row button {
   width: 42px;
   height: 42px;
   min-width: 42px;
@@ -320,16 +326,17 @@ h2 {
   justify-content: center;
 }
 
-.icon:hover {
+.icon:hover,
+.row button:hover {
   background: #ffe4e6;
 }
 
-.row .icon:first-of-type {
+.row button:first-of-type {
   background: #eef2ff;
   color: #4f46e5;
 }
 
-.row .icon:first-of-type:hover {
+.row button:first-of-type:hover {
   background: #e0e7ff;
 }
 
@@ -373,6 +380,7 @@ h2 {
   }
 
   .form button,
+  .form label,
   .checkbox-line {
     width: 100%;
   }
@@ -396,15 +404,11 @@ h2 {
   .member-form {
     grid-template-columns: 1fr;
   }
-
-  .row {
-    grid-template-columns: minmax(0, 1fr) auto 42px 42px;
-  }
 }
 
 @media (max-width: 620px) {
   .app {
-    width: min(100% - 20px, 1100px);
+    width: min(100% - 20px, 1120px);
     padding: 20px 0;
   }
 
@@ -432,8 +436,7 @@ h2 {
     grid-template-columns: 1fr 42px 42px;
   }
 
-  .row .income,
-  .row .expense {
+  .row > div:nth-child(2) {
     grid-column: 1 / -1;
   }
 }
