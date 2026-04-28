@@ -13,6 +13,7 @@ import {
   X,
   Users,
   UserPlus,
+  Repeat,
 } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { exportToExcel } from './export'
@@ -57,6 +58,7 @@ function emptyForm() {
     category: 'Jídlo',
     transaction_date: today,
     note: '',
+    is_recurring: false,
   }
 }
 
@@ -73,6 +75,7 @@ function App() {
   const [month, setMonth] = useState(currentMonth)
   const [loading, setLoading] = useState(true)
   const [editingItem, setEditingItem] = useState(null)
+  const [showRecurringOnly, setShowRecurringOnly] = useState(false)
 
   const [form, setForm] = useState(emptyForm())
 
@@ -212,25 +215,34 @@ function App() {
     await loadItems()
   }
 
-  const filtered = useMemo(() => {
+  const monthlyItems = useMemo(() => {
     return items.filter(item => String(item.transaction_date || '').startsWith(month))
   }, [items, month])
 
+  const filtered = useMemo(() => {
+    if (!showRecurringOnly) return monthlyItems
+    return monthlyItems.filter(item => item.is_recurring)
+  }, [monthlyItems, showRecurringOnly])
+
   const totals = useMemo(() => {
-    const income = filtered
+    const income = monthlyItems
       .filter(item => item.budget_group === 'income' || item.type === 'income')
       .reduce((sum, item) => sum + Number(item.amount), 0)
 
-    const mandatory = filtered
+    const mandatory = monthlyItems
       .filter(item => item.budget_group === 'mandatory')
       .reduce((sum, item) => sum + Number(item.amount), 0)
 
-    const extra = filtered
+    const extra = monthlyItems
       .filter(item => item.budget_group === 'extra')
       .reduce((sum, item) => sum + Number(item.amount), 0)
 
-    const planned = filtered
+    const planned = monthlyItems
       .filter(item => item.budget_group === 'planned')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+
+    const recurring = monthlyItems
+      .filter(item => item.is_recurring && item.budget_group !== 'income' && item.type !== 'income')
       .reduce((sum, item) => sum + Number(item.amount), 0)
 
     const totalExpenses = mandatory + extra + planned
@@ -240,11 +252,13 @@ function App() {
       mandatory,
       extra,
       planned,
+      recurring,
       totalExpenses,
       balance: income - totalExpenses,
       expectedBalance: income - mandatory - planned,
+      recurringRatio: income > 0 ? recurring / income : 0,
     }
-  }, [filtered])
+  }, [monthlyItems])
 
   const byCategory = useMemo(() => {
     const map = {}
@@ -257,12 +271,24 @@ function App() {
   }, [filtered])
 
   const byGroup = useMemo(() => {
+    const mandatory = filtered
+      .filter(item => item.budget_group === 'mandatory')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+
+    const extra = filtered
+      .filter(item => item.budget_group === 'extra')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+
+    const planned = filtered
+      .filter(item => item.budget_group === 'planned')
+      .reduce((sum, item) => sum + Number(item.amount), 0)
+
     return [
-      ['Mandatorní výdaje', totals.mandatory],
-      ['Mimořádné výdaje', totals.extra],
-      ['Plánovaný rozpočet', totals.planned],
+      ['Mandatorní výdaje', mandatory],
+      ['Mimořádné výdaje', extra],
+      ['Plánovaný rozpočet', planned],
     ].filter(([, amount]) => amount > 0)
-  }, [totals])
+  }, [filtered])
 
   async function saveItem(e) {
     e.preventDefault()
@@ -292,6 +318,7 @@ function App() {
       category: form.category || categories[actualType][0],
       transaction_date: form.transaction_date,
       note: form.note.trim(),
+      is_recurring: Boolean(form.is_recurring),
       user_id: user.id,
       household_id: householdId,
     }
@@ -336,6 +363,7 @@ function App() {
       category: item.category || categories[itemType][0],
       transaction_date: item.transaction_date || today,
       note: item.note || '',
+      is_recurring: Boolean(item.is_recurring),
     })
   }
 
@@ -391,6 +419,10 @@ function App() {
         type: nextType,
         category: categories[nextType][0],
       }
+    }
+
+    if (next.budget_group === 'income') {
+      nextForm.is_recurring = false
     }
 
     setForm(nextForm)
@@ -472,7 +504,7 @@ function App() {
           <Database size={18} />
           Supabase aktivní
 
-          <button className="logout" type="button" onClick={() => exportToExcel(filtered)}>
+          <button className="logout" type="button" onClick={() => exportToExcel(monthlyItems)}>
             <Download size={16} />
             Export Excel
           </button>
@@ -520,8 +552,10 @@ function App() {
         <Card icon={<TrendingDown />} title="Mandatorní výdaje" value={money(totals.mandatory)} />
         <Card icon={<TrendingDown />} title="Mimořádné výdaje" value={money(totals.extra)} />
         <Card icon={<Wallet />} title="Plánovaný rozpočet" value={money(totals.planned)} />
+        <Card icon={<Repeat />} title="Fixní náklady" value={money(totals.recurring)} />
         <Card icon={<Wallet />} title="Zůstatek po skutečných výdajích" value={money(totals.balance)} highlight={totals.balance >= 0} />
         <Card icon={<Users />} title="Očekávaný zůstatek" value={money(totals.expectedBalance)} highlight={totals.expectedBalance >= 0} />
+        <Card icon={<Repeat />} title="Fixní náklady z příjmů" value={`${Math.round(totals.recurringRatio * 100)} %`} highlight={totals.recurringRatio <= 0.6} />
       </section>
 
       <section className="panel">
@@ -583,6 +617,16 @@ function App() {
             onChange={e => updateForm({ note: e.target.value })}
           />
 
+          <label className="checkbox-line">
+            <input
+              type="checkbox"
+              checked={form.is_recurring}
+              disabled={form.budget_group === 'income'}
+              onChange={e => updateForm({ is_recurring: e.target.checked })}
+            />
+            Opakující se
+          </label>
+
           <button type="submit">
             <Plus size={18} />
             {editingItem ? 'Uložit změny' : 'Přidat'}
@@ -599,7 +643,18 @@ function App() {
 
       <section className="layout">
         <div className="panel">
-          <h2>Položky za měsíc</h2>
+          <div className="panel-head">
+            <h2>Položky za měsíc</h2>
+
+            <button
+              type="button"
+              className={showRecurringOnly ? 'filter-button active' : 'filter-button'}
+              onClick={() => setShowRecurringOnly(!showRecurringOnly)}
+            >
+              <Repeat size={16} />
+              {showRecurringOnly ? 'Zobrazit vše' : 'Jen fixní'}
+            </button>
+          </div>
 
           {filtered.length === 0 ? (
             <p className="muted">Zatím žádné položky.</p>
@@ -608,7 +663,10 @@ function App() {
               {filtered.map(item => (
                 <div className="row" key={item.id}>
                   <div>
-                    <strong>{item.title}</strong>
+                    <strong>
+                      {item.title}
+                      {item.is_recurring && <span className="badge">fixní</span>}
+                    </strong>
                     <span>
                       {item.transaction_date} · {groupLabel(item.budget_group || (item.type === 'income' ? 'income' : 'mandatory'))} · {item.category}
                       {item.note ? ` · ${item.note}` : ''}
