@@ -15,21 +15,25 @@ import {
   Repeat,
   AlertTriangle,
   CalendarDays,
+  PiggyBank,
+  Scale,
 } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { exportToExcel } from './export'
 import './style.css'
 
-const budgetGroups = [
-  { value: 'income', label: 'Příjem', type: 'income' },
-  { value: 'mandatory', label: 'Mandatorní výdaj', type: 'expense' },
-  { value: 'extra', label: 'Mimořádný výdaj', type: 'expense' },
-  { value: 'planned', label: 'Plánovaný rozpočet', type: 'expense' },
+const budgetTypes = [
+  { value: 'regular_income', label: 'Pravidelný příjem', group: 'income', type: 'income' },
+  { value: 'irregular_income', label: 'Nepravidelný příjem', group: 'income', type: 'income' },
+  { value: 'fixed_expense', label: 'Pevný výdaj', group: 'mandatory', type: 'expense' },
+  { value: 'controllable_expense', label: 'Kontrolovatelný výdaj', group: 'planned', type: 'expense' },
+  { value: 'extra_expense', label: 'Mimořádný výdaj', group: 'extra', type: 'expense' },
+  { value: 'reserve_fund', label: 'Rezervní fond', group: 'planned', type: 'expense' },
 ]
 
 const categories = {
-  income: ['Výplata', 'Podnikání', 'Přídavky', 'Dárky', 'Ostatní'],
-  expense: ['Bydlení', 'Jídlo', 'Doprava', 'Děti', 'Zdraví', 'Zábava', 'Oblečení', 'Spoření', 'Ostatní'],
+  income: ['Mzda', 'Podnikání', 'Dávky', 'Důchod', 'Pronájem', 'Jiné výnosy', 'Ostatní'],
+  expense: ['Bydlení', 'Energie', 'Hypotéka/úvěr', 'Pojištění', 'Jídlo', 'Doprava', 'Děti', 'Zdraví', 'Zábava', 'Oblečení', 'Rezerva', 'Ostatní'],
 }
 
 const today = new Date().toISOString().slice(0, 10)
@@ -43,21 +47,22 @@ function money(value) {
   }).format(Number(value || 0))
 }
 
-function groupLabel(value) {
-  return budgetGroups.find(group => group.value === value)?.label || 'Mandatorní výdaj'
+function typeConfig(value) {
+  return budgetTypes.find(type => type.value === value) || budgetTypes[2]
 }
 
-function groupType(value) {
-  return budgetGroups.find(group => group.value === value)?.type || 'expense'
+function typeLabel(value) {
+  return typeConfig(value).label
 }
 
 function emptyForm() {
   return {
     title: '',
     amount: '',
+    budget_type: 'fixed_expense',
     budget_group: 'mandatory',
     type: 'expense',
-    category: 'Jídlo',
+    category: 'Bydlení',
     transaction_date: today,
     note: '',
     is_recurring: false,
@@ -65,39 +70,42 @@ function emptyForm() {
 }
 
 function calculateTotals(list) {
-  const income = list
-    .filter(item => item.budget_group === 'income' || item.type === 'income')
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  const sum = (predicate) =>
+    list.filter(predicate).reduce((total, item) => total + Number(item.amount || 0), 0)
 
-  const mandatory = list
-    .filter(item => item.budget_group === 'mandatory')
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  const regularIncome = sum(item => item.budget_type === 'regular_income')
+  const irregularIncome = sum(item => item.budget_type === 'irregular_income')
+  const income = regularIncome + irregularIncome
 
-  const extra = list
-    .filter(item => item.budget_group === 'extra')
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  const fixedExpenses = sum(item => item.budget_type === 'fixed_expense')
+  const controllableExpenses = sum(item => item.budget_type === 'controllable_expense')
+  const extraExpenses = sum(item => item.budget_type === 'extra_expense')
+  const reserveFund = sum(item => item.budget_type === 'reserve_fund')
 
-  const planned = list
-    .filter(item => item.budget_group === 'planned')
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0)
-
-  const recurring = list
-    .filter(item => item.is_recurring && item.budget_group !== 'income' && item.type !== 'income')
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0)
-
-  const totalExpenses = mandatory + extra + planned
+  const recurring = sum(item => item.is_recurring && item.type !== 'income')
+  const totalExpenses = fixedExpenses + controllableExpenses + extraExpenses + reserveFund
+  const balance = income - totalExpenses
 
   return {
+    regularIncome,
+    irregularIncome,
     income,
-    mandatory,
-    extra,
-    planned,
+    fixedExpenses,
+    controllableExpenses,
+    extraExpenses,
+    reserveFund,
     recurring,
     totalExpenses,
-    balance: income - totalExpenses,
-    expectedBalance: income - mandatory - planned,
+    balance,
     recurringRatio: income > 0 ? recurring / income : 0,
+    reserveMonths: totalExpenses > 0 ? reserveFund / totalExpenses : 0,
   }
+}
+
+function getMonthStatus(balance) {
+  if (balance > 0) return { label: 'Přebytkový', text: 'Příjmy jsou vyšší než výdaje.', positive: true }
+  if (balance === 0) return { label: 'Vyrovnaný', text: 'Příjmy a výdaje jsou stejné.', positive: true }
+  return { label: 'Schodkový', text: 'Výdaje jsou vyšší než příjmy.', positive: false }
 }
 
 function App() {
@@ -136,9 +144,7 @@ function App() {
       setUser(session?.user || null)
     })
 
-    return () => {
-      listener.subscription.unsubscribe()
-    }
+    return () => listener.subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -261,6 +267,7 @@ function App() {
 
   const monthlyTotals = useMemo(() => calculateTotals(monthlyItems), [monthlyItems])
   const yearlyTotals = useMemo(() => calculateTotals(yearlyItems), [yearlyItems])
+  const monthStatus = useMemo(() => getMonthStatus(monthlyTotals.balance), [monthlyTotals.balance])
 
   const alerts = useMemo(() => {
     const result = []
@@ -269,35 +276,40 @@ function App() {
       result.push(`Fixní náklady jsou ${Math.round(monthlyTotals.recurringRatio * 100)} % měsíčních příjmů.`)
     }
 
-    if (monthlyTotals.extra > monthlyTotals.planned) {
-      result.push('Mimořádné výdaje v měsíci překročily plánovaný rozpočet.')
+    if (monthlyTotals.extraExpenses > monthlyTotals.controllableExpenses && monthlyTotals.controllableExpenses > 0) {
+      result.push('Mimořádné výdaje překročily kontrolovatelný rozpočet.')
     }
 
     if (monthlyTotals.balance < 0) {
-      result.push('Měsíční rozpočet je v mínusu.')
+      result.push('Měsíční rozpočet je schodkový.')
+    }
+
+    if (monthlyTotals.income > 0 && monthlyTotals.reserveFund === 0) {
+      result.push('Tento měsíc není vytvořena žádná rezerva.')
     }
 
     return result
   }, [monthlyTotals])
 
+  const byType = useMemo(() => {
+    return budgetTypes
+      .map(type => [
+        type.label,
+        visibleItems
+          .filter(item => item.budget_type === type.value)
+          .reduce((sum, item) => sum + Number(item.amount || 0), 0),
+      ])
+      .filter(([, amount]) => amount > 0)
+  }, [visibleItems])
+
   const byCategory = useMemo(() => {
     const map = {}
 
-    for (const item of visibleItems.filter(item => item.budget_group !== 'income' && item.type !== 'income')) {
+    for (const item of visibleItems.filter(item => item.type !== 'income')) {
       map[item.category] = (map[item.category] || 0) + Number(item.amount || 0)
     }
 
     return Object.entries(map).sort((a, b) => b[1] - a[1])
-  }, [visibleItems])
-
-  const byGroup = useMemo(() => {
-    const totals = calculateTotals(visibleItems)
-
-    return [
-      ['Mandatorní výdaje', totals.mandatory],
-      ['Mimořádné výdaje', totals.extra],
-      ['Plánovaný rozpočet', totals.planned],
-    ].filter(([, amount]) => amount > 0)
   }, [visibleItems])
 
   async function saveItem(e) {
@@ -318,17 +330,18 @@ function App() {
       return
     }
 
-    const actualType = groupType(form.budget_group)
+    const config = typeConfig(form.budget_type)
 
     const payload = {
       title: form.title.trim(),
       amount: Number(form.amount),
-      type: actualType,
-      budget_group: form.budget_group,
-      category: form.category || categories[actualType][0],
+      budget_type: form.budget_type,
+      budget_group: config.group,
+      type: config.type,
+      category: form.category || categories[config.type][0],
       transaction_date: form.transaction_date,
       note: form.note.trim(),
-      is_recurring: Boolean(form.is_recurring),
+      is_recurring: config.type === 'income' ? false : Boolean(form.is_recurring),
       user_id: user.id,
       household_id: householdId,
     }
@@ -360,17 +373,18 @@ function App() {
   }
 
   function startEdit(item) {
-    const itemGroup = item.budget_group || (item.type === 'income' ? 'income' : 'mandatory')
-    const itemType = groupType(itemGroup)
+    const itemType = item.budget_type || (item.type === 'income' ? 'regular_income' : 'fixed_expense')
+    const config = typeConfig(itemType)
 
     setEditingItem(item)
 
     setForm({
       title: item.title || '',
       amount: item.amount || '',
-      budget_group: itemGroup,
-      type: itemType,
-      category: item.category || categories[itemType][0],
+      budget_type: itemType,
+      budget_group: config.group,
+      type: config.type,
+      category: item.category || categories[config.type][0],
       transaction_date: item.transaction_date || today,
       note: item.note || '',
       is_recurring: Boolean(item.is_recurring),
@@ -404,23 +418,18 @@ function App() {
   }
 
   function updateForm(next) {
-    let nextForm = {
-      ...form,
-      ...next,
-    }
+    let nextForm = { ...form, ...next }
 
-    if (next.budget_group && next.budget_group !== form.budget_group) {
-      const nextType = groupType(next.budget_group)
+    if (next.budget_type && next.budget_type !== form.budget_type) {
+      const config = typeConfig(next.budget_type)
 
       nextForm = {
         ...nextForm,
-        type: nextType,
-        category: categories[nextType][0],
+        budget_group: config.group,
+        type: config.type,
+        category: categories[config.type][0],
+        is_recurring: config.type === 'income' ? false : nextForm.is_recurring,
       }
-    }
-
-    if (next.budget_group === 'income') {
-      nextForm.is_recurring = false
     }
 
     setForm(nextForm)
@@ -431,9 +440,7 @@ function App() {
       <main className="app">
         <section className="panel">
           <h1>Supabase není nastavený</h1>
-          <p className="muted">
-            Zkontroluj GitHub Secrets: VITE_SUPABASE_URL a VITE_SUPABASE_ANON_KEY.
-          </p>
+          <p className="muted">Zkontroluj GitHub Secrets: VITE_SUPABASE_URL a VITE_SUPABASE_ANON_KEY.</p>
         </section>
       </main>
     )
@@ -480,9 +487,7 @@ function App() {
             type="button"
             onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
           >
-            {authMode === 'login'
-              ? 'Nemáš účet? Registrovat'
-              : 'Už máš účet? Přihlásit'}
+            {authMode === 'login' ? 'Nemáš účet? Registrovat' : 'Už máš účet? Přihlásit'}
           </button>
         </section>
       </main>
@@ -494,7 +499,7 @@ function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">Rodinný rozpočet</p>
-          <h1>Měsíční a roční rozpočet</h1>
+          <h1>Přehled domácího rozpočtu</h1>
           <p className="muted">Přihlášen: {user.email}</p>
         </div>
 
@@ -557,54 +562,35 @@ function App() {
 
       <section className="panel">
         <h2>
-          <CalendarDays size={22} />
-          Měsíční rozpočet
+          <Scale size={22} />
+          Výsledek měsíce: {monthStatus.label}
         </h2>
+        <p className="muted">{monthStatus.text}</p>
 
         <section className="grid cards">
-          <Card icon={<TrendingUp />} title="Příjmy za měsíc" value={money(monthlyTotals.income)} />
-          <Card icon={<TrendingDown />} title="Výdaje za měsíc" value={money(monthlyTotals.totalExpenses)} />
-          <Card icon={<Repeat />} title="Fixní náklady" value={money(monthlyTotals.recurring)} />
-          <Card icon={<Wallet />} title="Zůstatek za měsíc" value={money(monthlyTotals.balance)} highlight={monthlyTotals.balance >= 0} />
+          <Card icon={<TrendingUp />} title="Pravidelné příjmy" value={money(monthlyTotals.regularIncome)} />
+          <Card icon={<TrendingUp />} title="Nepravidelné příjmy" value={money(monthlyTotals.irregularIncome)} />
+          <Card icon={<TrendingDown />} title="Pevné výdaje" value={money(monthlyTotals.fixedExpenses)} />
+          <Card icon={<TrendingDown />} title="Kontrolovatelné výdaje" value={money(monthlyTotals.controllableExpenses)} />
+          <Card icon={<AlertTriangle />} title="Mimořádné výdaje" value={money(monthlyTotals.extraExpenses)} />
+          <Card icon={<PiggyBank />} title="Rezervní fond" value={money(monthlyTotals.reserveFund)} />
+          <Card icon={<Wallet />} title="Výdaje celkem" value={money(monthlyTotals.totalExpenses)} />
+          <Card icon={<Wallet />} title="Zůstatek měsíce" value={money(monthlyTotals.balance)} highlight={monthlyTotals.balance >= 0} />
         </section>
       </section>
 
       <section className="panel">
-        <h2>Celkem v roce {year}</h2>
+        <h2>
+          <CalendarDays size={22} />
+          Celkem v roce {year}
+        </h2>
 
         <section className="grid cards">
           <Card icon={<TrendingUp />} title="Příjmy za rok" value={money(yearlyTotals.income)} />
           <Card icon={<TrendingDown />} title="Výdaje za rok" value={money(yearlyTotals.totalExpenses)} />
-          <Card icon={<Repeat />} title="Fixní náklady za rok" value={money(yearlyTotals.recurring)} />
+          <Card icon={<PiggyBank />} title="Rezerva za rok" value={money(yearlyTotals.reserveFund)} />
           <Card icon={<Wallet />} title="Zůstatek za rok" value={money(yearlyTotals.balance)} highlight={yearlyTotals.balance >= 0} />
         </section>
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Rodinný rozpočet</h2>
-            <p className="muted">Přidej dalšího člena e-mailem. Uživatel musí být nejdřív zaregistrovaný.</p>
-          </div>
-        </div>
-
-        <form className="form member-form" onSubmit={addMember}>
-          <input
-            type="email"
-            placeholder="E-mail člena rodiny"
-            value={memberEmail}
-            onChange={e => setMemberEmail(e.target.value)}
-          />
-
-          <button type="submit">
-            <UserPlus size={18} />
-            Přidat člena
-          </button>
-        </form>
-
-        {memberMessage && <p className="muted">{memberMessage}</p>}
-
-        <p className="muted">ID rozpočtu: {householdId || 'načítám…'}</p>
       </section>
 
       <section className="panel">
@@ -629,12 +615,12 @@ function App() {
           />
 
           <select
-            value={form.budget_group}
-            onChange={e => updateForm({ budget_group: e.target.value })}
+            value={form.budget_type}
+            onChange={e => updateForm({ budget_type: e.target.value })}
           >
-            {budgetGroups.map(group => (
-              <option key={group.value} value={group.value}>
-                {group.label}
+            {budgetTypes.map(type => (
+              <option key={type.value} value={type.value}>
+                {type.label}
               </option>
             ))}
           </select>
@@ -664,7 +650,7 @@ function App() {
             <input
               type="checkbox"
               checked={form.is_recurring}
-              disabled={form.budget_group === 'income'}
+              disabled={form.type === 'income'}
               onChange={e => updateForm({ is_recurring: e.target.checked })}
             />
             Fixní
@@ -704,7 +690,7 @@ function App() {
           ) : (
             <div className="list">
               {visibleItems.map(item => {
-                const isIncome = item.budget_group === 'income' || item.type === 'income'
+                const isIncome = item.type === 'income'
 
                 return (
                   <div className="row" key={item.id}>
@@ -715,7 +701,7 @@ function App() {
                       </strong>
 
                       <span>
-                        {item.transaction_date} · {groupLabel(item.budget_group)} · {item.category}
+                        {item.transaction_date} · {typeLabel(item.budget_type)} · {item.category}
                         {item.note ? ` · ${item.note}` : ''}
                       </span>
                     </div>
@@ -739,12 +725,12 @@ function App() {
         </div>
 
         <div className="panel">
-          <h2>Výdaje podle skupin</h2>
+          <h2>Rozpad rozpočtu</h2>
 
-          {byGroup.length === 0 ? (
-            <p className="muted">Bez výdajů.</p>
+          {byType.length === 0 ? (
+            <p className="muted">Bez položek.</p>
           ) : (
-            byGroup.map(([label, amount]) => (
+            byType.map(([label, amount]) => (
               <div className="bar-wrap" key={label}>
                 <div className="bar-label">
                   <span>{label}</span>
@@ -754,7 +740,7 @@ function App() {
                 <div className="bar">
                   <div
                     style={{
-                      width: `${Math.min(100, (amount / Math.max(monthlyTotals.totalExpenses, 1)) * 100)}%`,
+                      width: `${Math.min(100, (amount / Math.max(monthlyTotals.income + monthlyTotals.totalExpenses, 1)) * 100)}%`,
                     }}
                   />
                 </div>
@@ -785,6 +771,29 @@ function App() {
             ))
           )}
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>Nastavení rodiny</h2>
+        <p className="muted">Přidej dalšího člena e-mailem. Uživatel musí být nejdřív zaregistrovaný.</p>
+
+        <form className="form member-form" onSubmit={addMember}>
+          <input
+            type="email"
+            placeholder="E-mail člena rodiny"
+            value={memberEmail}
+            onChange={e => setMemberEmail(e.target.value)}
+          />
+
+          <button type="submit">
+            <UserPlus size={18} />
+            Přidat člena
+          </button>
+        </form>
+
+        {memberMessage && <p className="muted">{memberMessage}</p>}
+
+        <p className="muted">ID rozpočtu: {householdId || 'načítám…'}</p>
       </section>
     </main>
   )
