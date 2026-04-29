@@ -82,7 +82,9 @@ function calculateTotals(list) {
   const extraExpenses = sum(item => item.budget_type === 'extra_expense')
   const reserveFund = sum(item => item.budget_type === 'reserve_fund')
 
-  const recurring = sum(item => item.is_recurring && item.type !== 'income')
+  const recurringExpenses = sum(item => item.is_recurring && item.type !== 'income')
+  const recurringIncome = sum(item => item.is_recurring && item.type === 'income')
+
   const totalExpenses = fixedExpenses + controllableExpenses + extraExpenses + reserveFund
   const balance = income - totalExpenses
 
@@ -94,10 +96,11 @@ function calculateTotals(list) {
     controllableExpenses,
     extraExpenses,
     reserveFund,
-    recurring,
+    recurringExpenses,
+    recurringIncome,
     totalExpenses,
     balance,
-    recurringRatio: income > 0 ? recurring / income : 0,
+    recurringRatio: income > 0 ? recurringExpenses / income : 0,
     reserveMonths: totalExpenses > 0 ? reserveFund / totalExpenses : 0,
   }
 }
@@ -270,21 +273,34 @@ function App() {
   const yearlyTotals = useMemo(() => {
     const totals = calculateTotals(yearlyItems)
 
-    const recurringMonthly = monthlyItems
+    const recurringMonthlyExpenses = monthlyItems
       .filter(item => item.is_recurring && item.type !== 'income')
       .reduce((sum, item) => sum + Number(item.amount || 0), 0)
 
-    const recurringAlreadyInYear = yearlyItems
+    const recurringAlreadyInYearExpenses = yearlyItems
       .filter(item => item.is_recurring && item.type !== 'income')
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+
+    const recurringMonthlyIncome = monthlyItems
+      .filter(item => item.is_recurring && item.type === 'income')
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+
+    const recurringAlreadyInYearIncome = yearlyItems
+      .filter(item => item.is_recurring && item.type === 'income')
       .reduce((sum, item) => sum + Number(item.amount || 0), 0)
 
     const estimatedYearlyExpenses =
-      totals.totalExpenses - recurringAlreadyInYear + recurringMonthly * 12
+      totals.totalExpenses - recurringAlreadyInYearExpenses + recurringMonthlyExpenses * 12
+
+    const estimatedYearlyIncome =
+      totals.income - recurringAlreadyInYearIncome + recurringMonthlyIncome * 12
 
     return {
       ...totals,
+      income: estimatedYearlyIncome,
+      regularIncome: totals.regularIncome - recurringAlreadyInYearIncome + recurringMonthlyIncome * 12,
       totalExpenses: estimatedYearlyExpenses,
-      balance: totals.income - estimatedYearlyExpenses,
+      balance: estimatedYearlyIncome - estimatedYearlyExpenses,
     }
   }, [yearlyItems, monthlyItems])
 
@@ -353,6 +369,9 @@ function App() {
 
     const config = typeConfig(form.budget_type)
 
+    const canBeRecurring =
+      form.budget_type === 'regular_income' || config.type === 'expense'
+
     const payload = {
       title: form.title.trim(),
       amount: Number(form.amount),
@@ -362,7 +381,7 @@ function App() {
       category: form.category || categories[config.type][0],
       transaction_date: form.transaction_date,
       note: form.note.trim(),
-      is_recurring: config.type === 'income' ? false : Boolean(form.is_recurring),
+      is_recurring: canBeRecurring ? Boolean(form.is_recurring) : false,
       user_id: user.id,
       household_id: householdId,
     }
@@ -444,12 +463,15 @@ function App() {
     if (next.budget_type && next.budget_type !== form.budget_type) {
       const config = typeConfig(next.budget_type)
 
+      const canBeRecurring =
+        next.budget_type === 'regular_income' || config.type === 'expense'
+
       nextForm = {
         ...nextForm,
         budget_group: config.group,
         type: config.type,
         category: categories[config.type][0],
-        is_recurring: config.type === 'income' ? false : nextForm.is_recurring,
+        is_recurring: canBeRecurring ? nextForm.is_recurring : false,
       }
     }
 
@@ -671,7 +693,7 @@ function App() {
             <input
               type="checkbox"
               checked={form.is_recurring}
-              disabled={form.type === 'income'}
+              disabled={form.budget_type === 'irregular_income'}
               onChange={e => updateForm({ is_recurring: e.target.checked })}
             />
             Fixní
