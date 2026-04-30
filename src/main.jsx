@@ -71,8 +71,12 @@ function emptyForm() {
 
 function previousMonth(value) {
   const [year, month] = value.split('-').map(Number)
-  const date = new Date(year, month - 2, 1)
-  return date.toISOString().slice(0, 7)
+
+  if (month === 1) {
+    return `${year - 1}-12`
+  }
+
+  return `${year}-${String(month - 1).padStart(2, '0')}`
 }
 
 function calculateTotals(list) {
