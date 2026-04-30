@@ -438,5 +438,46 @@ h2 {
 
   .row > div:nth-child(2) {
     grid-column: 1 / -1;
-  }
+  
+}
+  .toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-actions input {
+  height: 34px;
+}
+
+.small-btn {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.small-btn:hover {
+  background: #d1d5db;
+}
+
+.small-btn.primary {
+  background: #6366f1;
+  color: white;
+}
+
+.small-btn.primary:hover {
+  background: #4f46e5;
 }
