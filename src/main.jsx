@@ -668,13 +668,15 @@ function App() {
         onChange={e => setYear(e.target.value)}
       />
 
-      <button className="small-btn" onClick={copyRecurringFromPreviousMonth}>
-        Kopírovat
-      </button>
+      <button type="button" className="small-btn" onClick={copyRecurringFromPreviousMonth}>
+  <Repeat size={14} />
+  Kopírovat
+</button>
 
-      <button className="small-btn primary" onClick={closeMonth}>
-        Uzavřít
-      </button>
+<button type="button" className="small-btn primary" onClick={closeMonth}>
+  <Lock size={14} />
+  Uzavřít
+</button>
     </div>
   </div>
 </section>
