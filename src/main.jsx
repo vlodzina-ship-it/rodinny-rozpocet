@@ -69,6 +69,12 @@ function emptyForm() {
   }
 }
 
+function previousMonth(value) {
+  const [year, month] = value.split('-').map(Number)
+  const date = new Date(year, month - 2, 1)
+  return date.toISOString().slice(0, 7)
+}
+
 function calculateTotals(list) {
   const sum = (predicate) =>
     list.filter(predicate).reduce((total, item) => total + Number(item.amount || 0), 0)
@@ -253,6 +259,29 @@ function App() {
     setMemberEmail('')
     setMemberMessage('Člen byl přidán do společného rozpočtu.')
     await loadItems()
+  }
+
+  async function copyRecurringFromPreviousMonth() {
+    if (!householdId) {
+      alert('Společný rozpočet ještě není připravený.')
+      return
+    }
+
+    const sourceMonth = previousMonth(month)
+
+    const { data, error } = await supabase.rpc('copy_recurring_transactions', {
+      source_month: sourceMonth,
+      target_month: month,
+    })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    await loadItems(householdId)
+
+    alert(`Zkopírováno ${data || 0} fixních položek z měsíce ${sourceMonth}.`)
   }
 
   const monthlyItems = useMemo(() => {
@@ -569,7 +598,7 @@ function App() {
             <p className="muted">Vyber měsíc pro měsíční rozpočet a rok pro roční souhrn.</p>
           </div>
 
-          <div className="form" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <div className="form" style={{ gridTemplateColumns: '1fr 1fr auto' }}>
             <input
               type="month"
               value={month}
@@ -586,6 +615,11 @@ function App() {
               value={year}
               onChange={e => setYear(e.target.value)}
             />
+
+            <button type="button" onClick={copyRecurringFromPreviousMonth}>
+              <Repeat size={16} />
+              Kopírovat fixní
+            </button>
           </div>
         </div>
       </section>
