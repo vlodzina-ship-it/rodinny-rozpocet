@@ -481,3 +481,45 @@ h2 {
 .small-btn.primary:hover {
   background: #4f46e5;
 }
+.toolbar-actions button,
+.small-btn {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #4f46e5;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.toolbar-actions button:hover,
+.small-btn:hover {
+  transform: translateY(-1px);
+  background: #e0e7ff;
+}
+
+.toolbar-actions button:last-child,
+.small-btn.primary {
+  background: #4f5df7;
+  color: white;
+}
+
+.toolbar-actions button:last-child:hover,
+.small-btn.primary:hover {
+  background: #3f49d8;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
