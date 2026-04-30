@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Plus,
@@ -136,8 +136,11 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [editingItem, setEditingItem] = useState(null)
   const [showRecurringOnly, setShowRecurringOnly] = useState(false)
+  const [copyMessage, setCopyMessage] = useState('')
 
   const [form, setForm] = useState(emptyForm())
+
+  const automaticCopyDone = useRef(new Set())
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -168,6 +171,8 @@ function App() {
       setItems([])
       setMemberEmail('')
       setMemberMessage('')
+      setCopyMessage('')
+      automaticCopyDone.current.clear()
     }
   }, [user])
 
@@ -204,6 +209,52 @@ function App() {
     }
   }
 
+  const monthlyItems = useMemo(() => {
+    return items.filter(item => String(item.transaction_date || '').startsWith(month))
+  }, [items, month])
+
+  useEffect(() => {
+    async function automaticCopyRecurring() {
+      if (!user || !householdId || loading) return
+
+      const key = `${householdId}-${month}`
+
+      if (automaticCopyDone.current.has(key)) return
+      automaticCopyDone.current.add(key)
+
+      const currentMonthItems = items.filter(item =>
+        String(item.transaction_date || '').startsWith(month)
+      )
+
+      if (currentMonthItems.length > 0) return
+
+      const sourceMonth = previousMonth(month)
+      const sourceMonthRecurringItems = items.filter(item =>
+        item.is_recurring && String(item.transaction_date || '').startsWith(sourceMonth)
+      )
+
+      if (sourceMonthRecurringItems.length === 0) return
+
+      const { data, error } = await supabase.rpc('copy_recurring_transactions', {
+        source_month: sourceMonth,
+        target_month: month,
+      })
+
+      if (error) {
+        setCopyMessage(error.message)
+        return
+      }
+
+      await loadItems(householdId)
+
+      if (Number(data || 0) > 0) {
+        setCopyMessage(`Automaticky zkopírováno ${data} fixních položek z měsíce ${sourceMonth}.`)
+      }
+    }
+
+    automaticCopyRecurring()
+  }, [user, householdId, loading, month, items])
+
   async function handleAuth(e) {
     e.preventDefault()
 
@@ -239,6 +290,8 @@ function App() {
     setItems([])
     setEditingItem(null)
     setForm(emptyForm())
+    setCopyMessage('')
+    automaticCopyDone.current.clear()
   }
 
   async function addMember(e) {
@@ -285,12 +338,11 @@ function App() {
 
     await loadItems(householdId)
 
+    const key = `${householdId}-${month}`
+    automaticCopyDone.current.add(key)
+
     alert(`Zkopírováno ${data || 0} fixních položek z měsíce ${sourceMonth}.`)
   }
-
-  const monthlyItems = useMemo(() => {
-    return items.filter(item => String(item.transaction_date || '').startsWith(month))
-  }, [items, month])
 
   const yearlyItems = useMemo(() => {
     return items.filter(item => String(item.transaction_date || '').startsWith(year))
@@ -342,6 +394,10 @@ function App() {
   const alerts = useMemo(() => {
     const result = []
 
+    if (copyMessage) {
+      result.push(copyMessage)
+    }
+
     if (monthlyTotals.recurringRatio > 0.6) {
       result.push(`Fixní náklady jsou ${Math.round(monthlyTotals.recurringRatio * 100)} % měsíčních příjmů.`)
     }
@@ -359,7 +415,7 @@ function App() {
     }
 
     return result
-  }, [monthlyTotals])
+  }, [monthlyTotals, copyMessage])
 
   const byType = useMemo(() => {
     return budgetTypes
@@ -609,6 +665,7 @@ function App() {
               onChange={e => {
                 setMonth(e.target.value)
                 setYear(e.target.value.slice(0, 4))
+                setCopyMessage('')
               }}
             />
 
