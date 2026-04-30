@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Plus,
@@ -17,6 +17,7 @@ import {
   CalendarDays,
   PiggyBank,
   Scale,
+  Lock,
 } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { exportToExcel } from './export'
@@ -77,6 +78,16 @@ function previousMonth(value) {
   }
 
   return `${year}-${String(month - 1).padStart(2, '0')}`
+}
+
+function nextMonth(value) {
+  const [year, month] = value.split('-').map(Number)
+
+  if (month === 12) {
+    return `${year + 1}-01`
+  }
+
+  return `${year}-${String(month + 1).padStart(2, '0')}`
 }
 
 function calculateTotals(list) {
@@ -140,8 +151,6 @@ function App() {
 
   const [form, setForm] = useState(emptyForm())
 
-  const automaticCopyDone = useRef(new Set())
-
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setLoading(false)
@@ -172,7 +181,6 @@ function App() {
       setMemberEmail('')
       setMemberMessage('')
       setCopyMessage('')
-      automaticCopyDone.current.clear()
     }
   }, [user])
 
@@ -208,52 +216,6 @@ function App() {
       setItems(data || [])
     }
   }
-
-  const monthlyItems = useMemo(() => {
-    return items.filter(item => String(item.transaction_date || '').startsWith(month))
-  }, [items, month])
-
-  useEffect(() => {
-    async function automaticCopyRecurring() {
-      if (!user || !householdId || loading) return
-
-      const key = `${householdId}-${month}`
-
-      if (automaticCopyDone.current.has(key)) return
-      automaticCopyDone.current.add(key)
-
-      const currentMonthItems = items.filter(item =>
-        String(item.transaction_date || '').startsWith(month)
-      )
-
-      if (currentMonthItems.length > 0) return
-
-      const sourceMonth = previousMonth(month)
-      const sourceMonthRecurringItems = items.filter(item =>
-        item.is_recurring && String(item.transaction_date || '').startsWith(sourceMonth)
-      )
-
-      if (sourceMonthRecurringItems.length === 0) return
-
-      const { data, error } = await supabase.rpc('copy_recurring_transactions', {
-        source_month: sourceMonth,
-        target_month: month,
-      })
-
-      if (error) {
-        setCopyMessage(error.message)
-        return
-      }
-
-      await loadItems(householdId)
-
-      if (Number(data || 0) > 0) {
-        setCopyMessage(`Automaticky zkopírováno ${data} fixních položek z měsíce ${sourceMonth}.`)
-      }
-    }
-
-    automaticCopyRecurring()
-  }, [user, householdId, loading, month, items])
 
   async function handleAuth(e) {
     e.preventDefault()
@@ -291,7 +253,6 @@ function App() {
     setEditingItem(null)
     setForm(emptyForm())
     setCopyMessage('')
-    automaticCopyDone.current.clear()
   }
 
   async function addMember(e) {
@@ -337,12 +298,43 @@ function App() {
     }
 
     await loadItems(householdId)
-
-    const key = `${householdId}-${month}`
-    automaticCopyDone.current.add(key)
-
-    alert(`Zkopírováno ${data || 0} fixních položek z měsíce ${sourceMonth}.`)
+    setCopyMessage(`Zkopírováno ${data || 0} fixních položek z měsíce ${sourceMonth}.`)
   }
+
+  async function closeMonth() {
+    if (!householdId) {
+      alert('Společný rozpočet ještě není připravený.')
+      return
+    }
+
+    const targetMonth = nextMonth(month)
+
+    const confirmed = confirm(
+      `Uzavřít měsíc ${month} a zkopírovat fixní položky do měsíce ${targetMonth}?`
+    )
+
+    if (!confirmed) return
+
+    const { data, error } = await supabase.rpc('copy_recurring_transactions', {
+      source_month: month,
+      target_month: targetMonth,
+    })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    await loadItems(householdId)
+
+    setMonth(targetMonth)
+    setYear(targetMonth.slice(0, 4))
+    setCopyMessage(`Měsíc ${month} uzavřen. Do měsíce ${targetMonth} bylo zkopírováno ${data || 0} fixních položek.`)
+  }
+
+  const monthlyItems = useMemo(() => {
+    return items.filter(item => String(item.transaction_date || '').startsWith(month))
+  }, [items, month])
 
   const yearlyItems = useMemo(() => {
     return items.filter(item => String(item.transaction_date || '').startsWith(year))
@@ -658,7 +650,7 @@ function App() {
             <p className="muted">Vyber měsíc pro měsíční rozpočet a rok pro roční souhrn.</p>
           </div>
 
-          <div className="form" style={{ gridTemplateColumns: '1fr 1fr auto' }}>
+          <div className="form" style={{ gridTemplateColumns: '1fr 1fr auto auto' }}>
             <input
               type="month"
               value={month}
@@ -680,6 +672,11 @@ function App() {
             <button type="button" onClick={copyRecurringFromPreviousMonth}>
               <Repeat size={16} />
               Kopírovat fixní
+            </button>
+
+            <button type="button" onClick={closeMonth}>
+              <Lock size={16} />
+              Uzavřít měsíc
             </button>
           </div>
         </div>
