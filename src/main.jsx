@@ -643,44 +643,41 @@ function App() {
         </div>
       </header>
 
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Období</h2>
-            <p className="muted">Vyber měsíc pro měsíční rozpočet a rok pro roční souhrn.</p>
-          </div>
+<section className="panel">
+  <div className="panel-head toolbar">
+    <div>
+      <h2>Období</h2>
+      <p className="muted">Vyber měsíc pro měsíční rozpočet a rok pro roční souhrn.</p>
+    </div>
 
-          <div className="form" style={{ gridTemplateColumns: '1fr 1fr auto auto' }}>
-            <input
-              type="month"
-              value={month}
-              onChange={e => {
-                setMonth(e.target.value)
-                setYear(e.target.value.slice(0, 4))
-                setCopyMessage('')
-              }}
-            />
+    <div className="toolbar-actions">
+      <input
+        type="month"
+        value={month}
+        onChange={e => {
+          setMonth(e.target.value)
+          setYear(e.target.value.slice(0, 4))
+        }}
+      />
 
-            <input
-              type="number"
-              min="2000"
-              max="2100"
-              value={year}
-              onChange={e => setYear(e.target.value)}
-            />
+      <input
+        type="number"
+        min="2000"
+        max="2100"
+        value={year}
+        onChange={e => setYear(e.target.value)}
+      />
 
-            <button type="button" onClick={copyRecurringFromPreviousMonth}>
-              <Repeat size={16} />
-              Kopírovat fixní
-            </button>
+      <button className="small-btn" onClick={copyRecurringFromPreviousMonth}>
+        Kopírovat
+      </button>
 
-            <button type="button" onClick={closeMonth}>
-              <Lock size={16} />
-              Uzavřít měsíc
-            </button>
-          </div>
-        </div>
-      </section>
+      <button className="small-btn primary" onClick={closeMonth}>
+        Uzavřít
+      </button>
+    </div>
+  </div>
+</section>
 
       {alerts.length > 0 && (
         <section className="panel" style={{ border: '2px solid #f59e0b' }}>
