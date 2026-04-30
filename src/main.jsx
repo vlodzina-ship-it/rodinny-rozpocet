@@ -670,6 +670,8 @@ function App() {
 
       <button type="button" className="small-btn" onClick={copyRecurringFromPreviousMonth}>
   <Repeat size={14} />
+<button type="button" className="small-btn" onClick={copyRecurringFromPreviousMonth}>
+  <Repeat size={14} />
   Kopírovat
 </button>
 
