@@ -72,21 +72,13 @@ function emptyForm() {
 
 function previousMonth(value) {
   const [year, month] = value.split('-').map(Number)
-
-  if (month === 1) {
-    return `${year - 1}-12`
-  }
-
+  if (month === 1) return `${year - 1}-12`
   return `${year}-${String(month - 1).padStart(2, '0')}`
 }
 
 function nextMonth(value) {
   const [year, month] = value.split('-').map(Number)
-
-  if (month === 12) {
-    return `${year + 1}-01`
-  }
-
+  if (month === 12) return `${year + 1}-01`
   return `${year}-${String(month + 1).padStart(2, '0')}`
 }
 
@@ -386,9 +378,7 @@ function App() {
   const alerts = useMemo(() => {
     const result = []
 
-    if (copyMessage) {
-      result.push(copyMessage)
-    }
+    if (copyMessage) result.push(copyMessage)
 
     if (monthlyTotals.recurringRatio > 0.6) {
       result.push(`Fixní náklady jsou ${Math.round(monthlyTotals.recurringRatio * 100)} % měsíčních příjmů.`)
@@ -533,9 +523,7 @@ function App() {
 
     await loadItems(householdId)
 
-    if (editingItem?.id === id) {
-      cancelEdit()
-    }
+    if (editingItem?.id === id) cancelEdit()
   }
 
   function updateForm(next) {
@@ -643,45 +631,44 @@ function App() {
         </div>
       </header>
 
-<section className="panel">
-  <div className="panel-head toolbar">
-    <div>
-      <h2>Období</h2>
-      <p className="muted">Vyber měsíc pro měsíční rozpočet a rok pro roční souhrn.</p>
-    </div>
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Období</h2>
+            <p className="muted">Vyber měsíc pro měsíční rozpočet a rok pro roční souhrn.</p>
+          </div>
 
-    <div className="toolbar-actions">
-      <input
-        type="month"
-        value={month}
-        onChange={e => {
-          setMonth(e.target.value)
-          setYear(e.target.value.slice(0, 4))
-        }}
-      />
+          <div className="toolbar-actions">
+            <input
+              type="month"
+              value={month}
+              onChange={e => {
+                setMonth(e.target.value)
+                setYear(e.target.value.slice(0, 4))
+                setCopyMessage('')
+              }}
+            />
 
-      <input
-        type="number"
-        min="2000"
-        max="2100"
-        value={year}
-        onChange={e => setYear(e.target.value)}
-      />
+            <input
+              type="number"
+              min="2000"
+              max="2100"
+              value={year}
+              onChange={e => setYear(e.target.value)}
+            />
 
-      <button type="button" className="small-btn" onClick={copyRecurringFromPreviousMonth}>
-  <Repeat size={14} />
-<button type="button" className="small-btn" onClick={copyRecurringFromPreviousMonth}>
-  <Repeat size={14} />
-  Kopírovat
-</button>
+            <button type="button" className="small-btn" onClick={copyRecurringFromPreviousMonth}>
+              <Repeat size={14} />
+              Kopírovat
+            </button>
 
-<button type="button" className="small-btn primary" onClick={closeMonth}>
-  <Lock size={14} />
-  Uzavřít
-</button>
-    </div>
-  </div>
-</section>
+            <button type="button" className="small-btn primary" onClick={closeMonth}>
+              <Lock size={14} />
+              Uzavřít
+            </button>
+          </div>
+        </div>
+      </section>
 
       {alerts.length > 0 && (
         <section className="panel" style={{ border: '2px solid #f59e0b' }}>
@@ -735,52 +722,23 @@ function App() {
         </div>
 
         <form className="form" onSubmit={saveItem}>
-          <input
-            placeholder="Název"
-            value={form.title}
-            onChange={e => updateForm({ title: e.target.value })}
-          />
+          <input placeholder="Název" value={form.title} onChange={e => updateForm({ title: e.target.value })} />
+          <input placeholder="Částka" type="number" min="0" step="0.01" value={form.amount} onChange={e => updateForm({ amount: e.target.value })} />
 
-          <input
-            placeholder="Částka"
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.amount}
-            onChange={e => updateForm({ amount: e.target.value })}
-          />
-
-          <select
-            value={form.budget_type}
-            onChange={e => updateForm({ budget_type: e.target.value })}
-          >
+          <select value={form.budget_type} onChange={e => updateForm({ budget_type: e.target.value })}>
             {budgetTypes.map(type => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
+              <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
 
-          <select
-            value={form.category}
-            onChange={e => updateForm({ category: e.target.value })}
-          >
+          <select value={form.category} onChange={e => updateForm({ category: e.target.value })}>
             {categories[form.type].map(category => (
               <option key={category}>{category}</option>
             ))}
           </select>
 
-          <input
-            type="date"
-            value={form.transaction_date}
-            onChange={e => updateForm({ transaction_date: e.target.value })}
-          />
-
-          <input
-            placeholder="Poznámka"
-            value={form.note}
-            onChange={e => updateForm({ note: e.target.value })}
-          />
+          <input type="date" value={form.transaction_date} onChange={e => updateForm({ transaction_date: e.target.value })} />
+          <input placeholder="Poznámka" value={form.note} onChange={e => updateForm({ note: e.target.value })} />
 
           <label>
             <input
@@ -835,7 +793,6 @@ function App() {
                         {item.title}
                         {item.is_recurring && <span className="badge">fixní</span>}
                       </strong>
-
                       <span>
                         {item.transaction_date} · {typeLabel(item.budget_type)} · {item.category}
                         {item.note ? ` · ${item.note}` : ''}
@@ -872,13 +829,8 @@ function App() {
                   <span>{label}</span>
                   <strong>{money(amount)}</strong>
                 </div>
-
                 <div className="bar">
-                  <div
-                    style={{
-                      width: `${Math.min(100, (amount / Math.max(monthlyTotals.income + monthlyTotals.totalExpenses, 1)) * 100)}%`,
-                    }}
-                  />
+                  <div style={{ width: `${Math.min(100, (amount / Math.max(monthlyTotals.income + monthlyTotals.totalExpenses, 1)) * 100)}%` }} />
                 </div>
               </div>
             ))
@@ -895,13 +847,8 @@ function App() {
                   <span>{category}</span>
                   <strong>{money(amount)}</strong>
                 </div>
-
                 <div className="bar">
-                  <div
-                    style={{
-                      width: `${Math.min(100, (amount / Math.max(monthlyTotals.totalExpenses, 1)) * 100)}%`,
-                    }}
-                  />
+                  <div style={{ width: `${Math.min(100, (amount / Math.max(monthlyTotals.totalExpenses, 1)) * 100)}%` }} />
                 </div>
               </div>
             ))
