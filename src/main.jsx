@@ -32,6 +32,15 @@ const budgetTypes = [
   { value: 'reserve_fund', label: 'Rezervní fond', group: 'planned', type: 'expense' },
 ]
 
+const typeColors = {
+  regular_income: '#16a34a',
+  irregular_income: '#22c55e',
+  fixed_expense: '#ef4444',
+  controllable_expense: '#f59e0b',
+  extra_expense: '#dc2626',
+  reserve_fund: '#3b82f6',
+}
+
 const categories = {
   income: ['Mzda', 'Podnikání', 'Dávky', 'Důchod', 'Pronájem', 'Jiné výnosy', 'Ostatní'],
   expense: ['Bydlení', 'Energie', 'Hypotéka/úvěr', 'Pojištění', 'Jídlo', 'Doprava', 'Děti', 'Zdraví', 'Zábava', 'Oblečení', 'Rezerva', 'Ostatní'],
@@ -54,6 +63,10 @@ function typeConfig(value) {
 
 function typeLabel(value) {
   return typeConfig(value).label
+}
+
+function typeColor(value) {
+  return typeColors[value] || '#4f5df7'
 }
 
 function emptyForm() {
@@ -403,11 +416,12 @@ function App() {
     return budgetTypes
       .map(type => [
         type.label,
+        type.value,
         visibleItems
           .filter(item => item.budget_type === type.value)
           .reduce((sum, item) => sum + Number(item.amount || 0), 0),
       ])
-      .filter(([, amount]) => amount > 0)
+      .filter(([, , amount]) => amount > 0)
   }, [visibleItems])
 
   const byCategory = useMemo(() => {
@@ -787,19 +801,37 @@ function App() {
                 const isIncome = item.type === 'income'
 
                 return (
-                  <div className="row" key={item.id}>
+                  <div
+                    className="row colored-row"
+                    key={item.id}
+                    style={{
+                      borderLeft: `5px solid ${typeColor(item.budget_type)}`,
+                    }}
+                  >
                     <div>
                       <strong>
                         {item.title}
-                        {item.is_recurring && <span className="badge">fixní</span>}
+                        <span
+                          className="badge"
+                          style={{ background: typeColor(item.budget_type) }}
+                        >
+                          {typeLabel(item.budget_type)}
+                        </span>
+                        {item.is_recurring && <span className="badge recurring-badge">fixní</span>}
                       </strong>
+
                       <span>
-                        {item.transaction_date} · {typeLabel(item.budget_type)} · {item.category}
+                        {item.transaction_date} · {item.category}
                         {item.note ? ` · ${item.note}` : ''}
                       </span>
                     </div>
 
-                    <div className={isIncome ? 'income' : 'expense'}>
+                    <div
+                      style={{
+                        color: typeColor(item.budget_type),
+                        fontWeight: 900,
+                      }}
+                    >
                       {isIncome ? '+' : '-'} {money(item.amount)}
                     </div>
 
@@ -823,14 +855,26 @@ function App() {
           {byType.length === 0 ? (
             <p className="muted">Bez položek.</p>
           ) : (
-            byType.map(([label, amount]) => (
-              <div className="bar-wrap" key={label}>
+            byType.map(([label, value, amount]) => (
+              <div className="bar-wrap" key={value}>
                 <div className="bar-label">
-                  <span>{label}</span>
+                  <span>
+                    <span
+                      className="legend-dot"
+                      style={{ background: typeColor(value) }}
+                    />
+                    {label}
+                  </span>
                   <strong>{money(amount)}</strong>
                 </div>
+
                 <div className="bar">
-                  <div style={{ width: `${Math.min(100, (amount / Math.max(monthlyTotals.income + monthlyTotals.totalExpenses, 1)) * 100)}%` }} />
+                  <div
+                    style={{
+                      width: `${Math.min(100, (amount / Math.max(monthlyTotals.income + monthlyTotals.totalExpenses, 1)) * 100)}%`,
+                      background: typeColor(value),
+                    }}
+                  />
                 </div>
               </div>
             ))
@@ -847,8 +891,14 @@ function App() {
                   <span>{category}</span>
                   <strong>{money(amount)}</strong>
                 </div>
+
                 <div className="bar">
-                  <div style={{ width: `${Math.min(100, (amount / Math.max(monthlyTotals.totalExpenses, 1)) * 100)}%` }} />
+                  <div
+                    style={{
+                      width: `${Math.min(100, (amount / Math.max(monthlyTotals.totalExpenses, 1)) * 100)}%`,
+                      background: '#6366f1',
+                    }}
+                  />
                 </div>
               </div>
             ))
