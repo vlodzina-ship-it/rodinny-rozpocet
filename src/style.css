@@ -266,3 +266,19 @@ body {
   width: 14px;
   height: 14px;
 }
+
+.colored-row {
+  background: #ffffff !important;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.recurring-badge {
+  background: #111827 !important;
+}
