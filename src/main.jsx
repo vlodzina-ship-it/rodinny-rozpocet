@@ -41,6 +41,21 @@ const typeColors = {
   reserve_fund: '#3b82f6',
 }
 
+const categoryColors = [
+  '#4f46e5',
+  '#2563eb',
+  '#0891b2',
+  '#16a34a',
+  '#ca8a04',
+  '#ea580c',
+  '#dc2626',
+  '#be123c',
+  '#9333ea',
+  '#0f766e',
+  '#64748b',
+  '#111827',
+]
+
 const categories = {
   income: ['Mzda', 'Podnikání', 'Dávky', 'Důchod', 'Pronájem', 'Jiné výnosy', 'Ostatní'],
   expense: ['Bydlení', 'Energie', 'Hypotéka/úvěr', 'Pojištění', 'Jídlo', 'Doprava', 'Děti', 'Zdraví', 'Zábava', 'Oblečení', 'Rezerva', 'Ostatní'],
@@ -135,6 +150,25 @@ function getMonthStatus(balance) {
   if (balance > 0) return { label: 'Přebytkový', text: 'Příjmy jsou vyšší než výdaje.', positive: true }
   if (balance === 0) return { label: 'Vyrovnaný', text: 'Příjmy a výdaje jsou stejné.', positive: true }
   return { label: 'Schodkový', text: 'Výdaje jsou vyšší než příjmy.', positive: false }
+}
+
+function pieGradient(data) {
+  const total = data.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+
+  if (total <= 0) {
+    return '#e5e7eb'
+  }
+
+  let start = 0
+
+  return `conic-gradient(${data
+    .map(item => {
+      const end = start + (Number(item.amount || 0) / total) * 100
+      const segment = `${item.color} ${start}% ${end}%`
+      start = end
+      return segment
+    })
+    .join(', ')})`
 }
 
 function App() {
@@ -433,6 +467,22 @@ function App() {
 
     return Object.entries(map).sort((a, b) => b[1] - a[1])
   }, [visibleItems])
+
+  const pieByType = useMemo(() => {
+    return byType.map(([label, value, amount]) => ({
+      label,
+      amount,
+      color: typeColor(value),
+    }))
+  }, [byType])
+
+  const pieByCategory = useMemo(() => {
+    return byCategory.map(([label, amount], index) => ({
+      label,
+      amount,
+      color: categoryColors[index % categoryColors.length],
+    }))
+  }, [byCategory])
 
   async function saveItem(e) {
     e.preventDefault()
@@ -885,10 +935,16 @@ function App() {
           {byCategory.length === 0 ? (
             <p className="muted">Bez kategorií.</p>
           ) : (
-            byCategory.map(([category, amount]) => (
+            byCategory.map(([category, amount], index) => (
               <div className="bar-wrap" key={category}>
                 <div className="bar-label">
-                  <span>{category}</span>
+                  <span>
+                    <span
+                      className="legend-dot"
+                      style={{ background: categoryColors[index % categoryColors.length] }}
+                    />
+                    {category}
+                  </span>
                   <strong>{money(amount)}</strong>
                 </div>
 
@@ -896,13 +952,16 @@ function App() {
                   <div
                     style={{
                       width: `${Math.min(100, (amount / Math.max(monthlyTotals.totalExpenses, 1)) * 100)}%`,
-                      background: '#6366f1',
+                      background: categoryColors[index % categoryColors.length],
                     }}
                   />
                 </div>
               </div>
             ))
           )}
+
+          <PieChart title="Koláč podle typů" data={pieByType} />
+          <PieChart title="Koláč podle kategorií" data={pieByCategory} />
         </div>
       </section>
 
@@ -939,6 +998,44 @@ function Card({ icon, title, value, highlight }) {
       <span>{title}</span>
       <strong>{value}</strong>
     </div>
+  )
+}
+
+function PieChart({ title, data }) {
+  const total = data.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+
+  if (data.length === 0 || total <= 0) {
+    return null
+  }
+
+  return (
+    <section className="pie-box">
+      <h2>{title}</h2>
+
+      <div
+        className="pie-chart"
+        style={{
+          background: pieGradient(data),
+        }}
+      >
+        <div className="pie-hole">
+          <strong>{money(total)}</strong>
+          <span>celkem</span>
+        </div>
+      </div>
+
+      <div className="pie-legend">
+        {data.map(item => (
+          <div className="pie-legend-row" key={item.label}>
+            <span>
+              <span className="legend-dot" style={{ background: item.color }} />
+              {item.label}
+            </span>
+            <strong>{Math.round((item.amount / total) * 100)} %</strong>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
