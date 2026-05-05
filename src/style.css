@@ -282,3 +282,70 @@ body {
 .recurring-badge {
   background: #111827 !important;
 }
+
+.pie-box {
+  margin-top: 28px;
+}
+
+.pie-chart {
+  width: 170px;
+  height: 170px;
+  border-radius: 999px;
+  margin: 16px auto;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+}
+
+.pie-hole {
+  width: 92px;
+  height: 92px;
+  border-radius: 999px;
+  background: white;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 10px;
+}
+
+.pie-hole strong {
+  font-size: 13px;
+}
+
+.pie-hole span {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.pie-legend {
+  display: grid;
+  gap: 7px;
+}
+
+.pie-legend-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.pie-legend-row span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.colored-row {
+  background: #ffffff !important;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.recurring-badge {
+  background: #111827 !important;
+}
